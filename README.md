@@ -9,11 +9,19 @@ Voice -> speech-to-text (faster-whisper) -> local LLM (Ollama) with finance tool
 ## Status
 
 - [x] Step 0: Setup and checks
-- [ ] Step 1: Talking assistant on the laptop
+- [x] Step 1: Talking assistant on the laptop
 - [ ] Step 2: Finance tools and demo mode
 - [ ] Step 3: Puck prototype on a dev board
 - [ ] Step 4: Custom circuit board
 - [ ] Step 5: Enclosure and demo prep
+
+## Setup
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r software/requirements.txt
+python -m piper.download_voices en_US-lessac-medium
+python software/transcribe.py
 
 ## Notes
 
