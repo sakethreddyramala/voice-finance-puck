@@ -1,0 +1,5 @@
+# Optional: CUDA libraries so faster-whisper can run on an NVIDIA GPU (RTX 4060).
+# Install AFTER requirements.txt:  pip install -r software/requirements-gpu.txt
+# You also need a current NVIDIA driver. Ollama uses the GPU on its own, no extra pip packages.
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
