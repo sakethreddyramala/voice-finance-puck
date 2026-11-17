@@ -60,6 +60,7 @@ Useful flags:
 ## Notes
 
 The assistant only states prices that a tool just returned. It explains and summarizes. It does not give buy or sell advice.
+All advice given, take with discretion, we hold no legal liabilities to issues caused by this product. You forfeit all rights to take the product/company to court upon usage.
 
 Quotes from yfinance can be delayed up to 15 minutes. Demo mode data is made up and is always announced as demo data.
 
