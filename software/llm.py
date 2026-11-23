@@ -19,41 +19,27 @@ import re
 import urllib.request
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
 KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")  # keep the model in VRAM between turns
 MAX_TOOL_ROUNDS = 4
 
 SYSTEM_PROMPT = (
-    "You are a friendly voice assistant on a desk puck. Your specialty is finance, but you "
-    "can chat too. Your replies are spoken aloud, so use one to three short sentences of "
-    "plain spoken English: no markdown, no lists, no emojis. "
-    "NEVER SAY 'LET ME CHECK': all tool lookups have already finished before you speak. "
-    "Never say 'let me check', 'one moment', 'now let me look up', or promise to check "
-    "another stock. Answer only with what you have right now. "
-    "CHIT-CHAT: for greetings, small talk, thanks, jokes, or questions about you (for example "
-    "'how are you doing today?'), just reply naturally like a friendly person, for example "
-    "'Doing great, thanks for asking! What can I help you with?'. Never mention markets, "
-    "tools, or data unless the person asked about them. "
-    "NUMBERS: you may only say a price, percentage, index level, market cap, or ratio that "
-    "appears in a tool result in this conversation. Never use memory or guess a number. "
-    "Write numbers in natural spoken form: say 'down 3.72 percent' instead of '-3.72 percent', "
-    "'up 2.1 percent' instead of '+2.1%', and '20 dollars and 31 cents' instead of '$20.31'. "
-    "Never output minus signs, plus signs, dollar signs, or percent symbols. "
-    "DATA: say which ticker each number belongs to. If a tool result has demo true, say it "
-    "is demo data and not real prices. If a tool result has an error, say you couldn't get "
-    "that data. "
-    "ADVICE: never give buy, sell, or hold advice, price predictions, or opinions on whether "
-    "something is undervalued or overvalued. If asked, say you can't give investment advice "
-    "and offer the facts instead. "
-    "SCOPE: you can only check specific tickers or company names and the major indexes "
-    "(S and P 500, Nasdaq, Dow, VIX). You cannot screen or rank the whole market. "
-    "You can explain general finance concepts in plain words without specific market prices."
+    "You are a helpful, friendly, all-purpose voice assistant on a desk puck. You can answer "
+    "questions on any topic—science, tech, history, sports, everyday life, coding, or finance. "
+    "Your replies are spoken aloud, so keep them concise (2 to 4 short sentences) in plain "
+    "spoken English: no markdown, no bullet lists, no emojis. "
+    "NEVER SAY 'LET ME CHECK': all web searches and tool lookups have already finished before "
+    "you speak. Never say 'let me check', 'one moment', or 'you might want to check a website'—"
+    "give the direct answer from the search results or your knowledge right away. "
+    "NUMBERS & SPEECH: write numbers in natural spoken words/digits without symbols: say "
+    "'down 3.72 percent' instead of '-3.72%', and '20 dollars and 31 cents' instead of '$20.31'. "
+    "When quoting live stock prices or market data, only use the exact numbers returned by the tools."
 )
 
 # Extra instruction appended to the system prompt depending on how the router classified the message.
 INTENT_NOTES = {
-    "chat": "This message is casual conversation. No finance data is needed. Reply briefly and naturally.",
-    "general": "This is a general finance concept question. Explain it clearly and concisely without quoting live market prices.",
+    "chat": "This message is casual conversation. No data tools are needed. Reply briefly and naturally.",
+    "general": "This is a general question or concept. Explain it clearly and concisely.",
     "data": ("The tool results for this question are already in the conversation. Answer ONLY "
              "using the tool results provided. Do not promise to look up anything else."),
 }
@@ -104,7 +90,6 @@ _TENS = {w: 10 * (i + 2) for i, w in enumerate(
 _SCALES = {"thousand": 1e3, "million": 1e6, "billion": 1e9, "trillion": 1e12}
 _BIG = ("hundred",) + tuple(_SCALES)
 
-# Things that look like numbers but are names or durations, not market figures.
 _MASK = re.compile(
     r"s\s*(?:&|and)\s*p\s*500|nasdaq\s*-?\s*100|dow\s*30|russell\s*(?:1000|2000)|401\s*\(?k\)?|"
     r"\b\d+(?:\.\d+)?\s*-?\s*(?:day|week|month|year|quarter|hour|minute)s?\b", re.IGNORECASE)
@@ -131,7 +116,6 @@ def _words_int(words):
 
 
 def _run_to_text(run):
-    """['one','hundred','forty','two'] -> '142'; ['four','point','six','trillion'] -> '4.6 trillion'."""
     run = list(run)
     scale = run.pop() if run and run[-1] in _SCALES else None
     if "point" in run:
@@ -146,7 +130,6 @@ def _run_to_text(run):
 
 
 def _normalize_number_words(text):
-    """Rewrite spelled-out numbers as digits so 'one hundred forty two dollars' is checked too."""
     toks = re.findall(r"[A-Za-z']+|\d[\d,]*(?:\.\d+)?|\S", text)
     low = [t.lower() for t in toks]
     is_num = lambda w: w in _ONES or w in _TENS or w in _BIG
@@ -175,12 +158,13 @@ def _normalize_number_words(text):
 
 
 def _numbers_in(obj, out):
-    """Collect every number in a tool result (any nesting) into `out`."""
     if isinstance(obj, bool):
         return
     if isinstance(obj, (int, float)):
         if math.isfinite(obj):
             out.append(float(obj))
+    elif isinstance(obj, str):
+        out.extend(_numbers_in_text(obj))
     elif isinstance(obj, dict):
         for v in obj.values():
             _numbers_in(v, out)
@@ -190,7 +174,6 @@ def _numbers_in(obj, out):
 
 
 def _numbers_in_text(text):
-    """Extract numeric values mentioned in the user's own prompt so they can be echoed safely."""
     norm = _normalize_number_words(text)
     vals = []
     for m in _CLAIM.finditer(norm):
@@ -206,7 +189,6 @@ def _supported(value, dec, unit, money, allowed, allow_general_counts=False):
     scale = _SCALES.get(unit, 1)
     if not unit and not money and dec == 0 and (value <= 10 or 1900 <= value <= 2100):
         return True
-    # In general finance explanations ("an index of 500 companies"), allow plain unitless integers.
     if allow_general_counts and not unit and not money and dec == 0:
         return True
     q = 10 ** dec
@@ -218,7 +200,6 @@ def _supported(value, dec, unit, money, allowed, allow_general_counts=False):
 
 
 def unsupported_numbers(text, allowed, allow_general_counts=False):
-    """Numbers in `text` that do not match any number in `allowed`."""
     norm = _MASK.sub(" ", _normalize_number_words(text))
     bad = []
     for m in _CLAIM.finditer(norm):
@@ -231,7 +212,6 @@ def unsupported_numbers(text, allowed, allow_general_counts=False):
 
 # ---- Ollama -------------------------------------------------------------------
 def _stream(messages, tools):
-    """Yield parsed JSON chunks from one streaming Ollama call."""
     body = {
         "model": OLLAMA_MODEL,
         "messages": messages,
@@ -253,14 +233,12 @@ def _stream(messages, tools):
 
 
 def _generate(messages, tools, allowed, speak, log, allow_general_counts=False):
-    """Stream one model reply. Each sentence is number-checked before it is printed or spoken."""
     spoken, buf, tool_calls, blocked = [], "", [], False
 
     def emit(sentence):
         s = clean_for_speech(sentence)
         if not s:
             return True
-        # Drop trailing filler like "Now, let me check Micron." so the assistant doesn't hang.
         if _DEFERRED_LOOKUP.search(s):
             log(f"[guard] stripped deferred-lookup sentence: {s!r}")
             return True
@@ -309,19 +287,16 @@ def _loads(raw):
 
 
 def _fallback_text(results, summarize, spoken_any):
-    """What to say when the guard rejected the model's wording."""
     if results and summarize:
         facts = " ".join(clean_for_speech(summarize(name, args, data)) for name, args, data in results)
         return ("Let me give you the verified numbers. " if spoken_any else "") + facts
     if spoken_any:
         return "Sorry, I can't verify the rest of that."
-    return ("Sorry, I don't have a verified number for that. Ask me about a specific ticker "
-            "and I'll look it up.")
+    return "Sorry, I couldn't verify that information."
 
 
 def ask(history, on_sentence, tools=None, run_tool=None, on_tool=None, system=SYSTEM_PROMPT,
         route=None, summarize=None, log=None):
-    """Answer the latest user message in `history` (a list of user/assistant text dicts)."""
     out_log = log or (lambda m: print(m, flush=True))
     mid_line = [True]
 
@@ -359,10 +334,15 @@ def ask(history, on_sentence, tools=None, run_tool=None, on_tool=None, system=SY
 
     system_text = (system + " " + INTENT_NOTES.get(intent, "")).strip()
     messages = [{"role": "system", "content": system_text}] + list(history)
-    # Seed allowed numbers with any numbers the user themselves said in their prompt.
     results, allowed = [], _numbers_in_text(user_text)
     use_tools = tools if intent == "auto" else None
-    allow_general_counts = (intent == "general")
+    
+    # Only enforce strict price verification when stock/market tools actually ran
+    has_market_tools = any(
+        n in {"get_stock_quote", "get_market_overview", "get_options_summary", "get_price_history", "get_top_movers"}
+        for n, _ in plan.get("calls", [])
+    )
+    allow_general_counts = not has_market_tools
 
     def run_one(name, args):
         if on_tool:
@@ -407,15 +387,4 @@ def ask(history, on_sentence, tools=None, run_tool=None, on_tool=None, system=SY
                     args = {}
             messages.append({"role": "tool", "tool_name": name, "content": run_one(name, args)})
     else:
-        msg = "Sorry, I couldn't finish looking that up."
-        say(msg)
-        spoken.append(msg)
-
-    final = " ".join(spoken).strip()
-    if any(d.get("demo") for _, _, d in results) and "demo" not in final.lower():
-        note = "Note that this is demo data, not real market prices."
-        log("[guard] added demo-data disclosure")
-        say(note)
-        final += " " + note
-    print()
-    return final
+        msg = "Sorry,
