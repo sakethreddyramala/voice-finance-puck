@@ -387,4 +387,10 @@ def ask(history, on_sentence, tools=None, run_tool=None, on_tool=None, system=SY
                     args = {}
             messages.append({"role": "tool", "tool_name": name, "content": run_one(name, args)})
     else:
-        msg = "Sorry,
+        msg = "Sorry, I couldn't finish looking that up."
+        say(msg)
+        spoken.append(msg)
+
+    final = " ".join(spoken).strip()
+    print()
+    return final
