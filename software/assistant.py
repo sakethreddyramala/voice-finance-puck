@@ -1,9 +1,13 @@
 """Voice finance assistant: mic -> faster-whisper (GPU) -> Ollama + finance tools -> Piper -> speaker.
 
 Run from the repo root:
-    python software/assistant.py            # talk to it (Enter to start/stop recording)
+    python software/assistant.py            # hold the hotkey (default F9) to talk, release to send
+    python software/assistant.py --enter    # old behaviour: Enter to start/stop recording
     python software/assistant.py --text     # type instead of speaking (debug the LLM/tools)
     python software/assistant.py --demo     # use sample data, no internet needed
+
+The hotkey is global (works while the terminal is not focused), which is the laptop
+stand-in for the puck's hold-to-talk button.
 
 Environment variables (all optional):
     OLLAMA_MODEL   default llama3.1:8b
@@ -11,6 +15,8 @@ Environment variables (all optional):
     WHISPER_DEVICE auto | cuda | cpu  (default auto: GPU first, CPU fallback)
     PIPER_VOICE    default en_US-lessac-medium
     DEMO_MODE      1 to force demo data
+    HOTKEY         push-to-talk key: a pynput key name (f9, f8, space, caps_lock,
+                   scroll_lock, pause, ...) or a single character. Default f9.
 """
 import os
 import sys
@@ -36,6 +42,8 @@ PIPER_VOICE = os.environ.get("PIPER_VOICE", "en_US-lessac-medium")
 MIC_RATE = 16000
 MAX_TURNS = 6  # remember the last N user/assistant exchanges
 TEXT_MODE = "--text" in sys.argv
+USE_HOTKEY = "--enter" not in sys.argv
+HOTKEY = os.environ.get("HOTKEY", "f9").strip().lower()
 
 # Helps Whisper spell tickers and company names correctly.
 WHISPER_HINT = (
@@ -109,6 +117,108 @@ def record_until_enter():
     return np.concatenate(chunks).flatten()
 
 
+def _key_matches(pressed, target):
+    """True if a pynput key event is the target key (case-insensitive for characters)."""
+    if pressed == target:
+        return True
+    a, b = getattr(pressed, "char", None), getattr(target, "char", None)
+    return a is not None and b is not None and a.lower() == b.lower()
+
+
+class HotkeyRecorder:
+    """Hold-to-talk: record while the hotkey is held down, stop when it is released.
+
+    A pynput listener thread watches the keyboard globally and only sets/clears
+    events; all audio work stays on the main thread. Key presses that happen while
+    the assistant is thinking or speaking are ignored, so a stray press can't
+    start a recording mid-answer (and the mic never hears the speaker).
+    """
+
+    def __init__(self, key_name):
+        from pynput import keyboard  # imported lazily so --enter / --text work without it
+
+        self.key_name = key_name
+        self.key = self._parse(keyboard, key_name)
+        self._armed = False        # True only while we are waiting for the user to talk
+        self._down = False         # True while the hotkey is physically held
+        self._pressed = threading.Event()
+        self._released = threading.Event()
+        self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+        self._listener.daemon = True
+        self._listener.start()
+
+    @staticmethod
+    def _parse(keyboard, name):
+        key = getattr(keyboard.Key, name, None)  # named keys: f9, space, caps_lock, ...
+        if key is not None:
+            return key
+        if len(name) == 1:
+            return keyboard.KeyCode.from_char(name)
+        raise ValueError(
+            f"Unknown HOTKEY '{name}'. Use a key name like f9, f8, space, caps_lock, "
+            "scroll_lock, pause, or a single character."
+        )
+
+    # -- runs on the pynput thread
+    def _on_press(self, key):
+        # Holding a key makes the OS repeat key-down events; _down filters those out.
+        if self._armed and not self._down and _key_matches(key, self.key):
+            self._down = True
+            self._pressed.set()
+
+    def _on_release(self, key):
+        if self._down and _key_matches(key, self.key):
+            self._down = False
+            self._released.set()
+
+    # -- runs on the main thread
+    def _wait(self, event):
+        # Poll instead of event.wait() so Ctrl+C still works on Windows.
+        while not event.wait(0.1):
+            pass
+
+    def record(self):
+        chunks = []
+
+        def callback(indata, frames, time_info, status):
+            chunks.append(indata.copy())
+
+        self._pressed.clear()
+        self._released.clear()
+        self._armed = True
+        print(f"\nHold {self.key_name.upper()} to talk...")
+        self._wait(self._pressed)
+        self._armed = False
+        print("Listening... release to send.")
+        with sd.InputStream(samplerate=MIC_RATE, channels=1, dtype="float32", callback=callback):
+            self._wait(self._released)
+        if not chunks:
+            return np.zeros(0, dtype="float32")
+        return np.concatenate(chunks).flatten()
+
+    def close(self):
+        self._listener.stop()
+
+
+def make_recorder():
+    """Return a zero-argument function that records one utterance and returns float32 audio."""
+    if not USE_HOTKEY:
+        return record_until_enter
+    try:
+        recorder = HotkeyRecorder(HOTKEY)
+    except ImportError:
+        print("(pynput is not installed, falling back to Enter-to-talk. "
+              "Run: pip install pynput)")
+        return record_until_enter
+    except ValueError as e:
+        print(f"({e} Falling back to Enter-to-talk.)")
+        return record_until_enter
+    except Exception as e:  # e.g. no display / missing OS permission for global key capture
+        print(f"(Hotkey listener unavailable: {e}. Falling back to Enter-to-talk.)")
+        return record_until_enter
+    return recorder.record
+
+
 def transcribe(stt, audio):
     if len(audio) < MIC_RATE * 0.3:
         return ""
@@ -175,6 +285,7 @@ def main():
         stt = load_whisper()
     init_piper()
     threading.Thread(target=speaker_worker, daemon=True).start()
+    record = None if TEXT_MODE else make_recorder()
 
     demo = os.environ.get("DEMO_MODE") == "1"
     print(f"Ready. LLM: {llm.OLLAMA_MODEL} | data: {'DEMO' if demo else 'live yfinance'} | Ctrl+C to quit.")
@@ -185,7 +296,7 @@ def main():
             if TEXT_MODE:
                 text = input("\nYou: ").strip()
             else:
-                text = transcribe(stt, record_until_enter())
+                text = transcribe(stt, record())
                 print(f"You: {text}" if text else "(didn't catch anything)")
             if not text:
                 continue
