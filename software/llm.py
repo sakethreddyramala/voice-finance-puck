@@ -27,16 +27,18 @@ SYSTEM_PROMPT = (
     "You are a friendly voice assistant on a desk puck. Your specialty is finance, but you "
     "can chat too. Your replies are spoken aloud, so use one to three short sentences of "
     "plain spoken English: no markdown, no lists, no emojis. "
+    "NEVER SAY 'LET ME CHECK': all tool lookups have already finished before you speak. "
+    "Never say 'let me check', 'one moment', 'now let me look up', or promise to check "
+    "another stock. Answer only with what you have right now. "
     "CHIT-CHAT: for greetings, small talk, thanks, jokes, or questions about you (for example "
     "'how are you doing today?'), just reply naturally like a friendly person, for example "
     "'Doing great, thanks for asking! What can I help you with?'. Never mention markets, "
-    "tools, or data unless the person asked about them, and never say you are looking "
-    "something up. "
+    "tools, or data unless the person asked about them. "
     "NUMBERS: you may only say a price, percentage, index level, market cap, or ratio that "
-    "appears in a tool result in this conversation. Never use memory or guess a number. If "
-    "you don't have a number, say you would need to look it up. Write numbers as plain "
-    "digits with the unit as a word, like '189.43 dollars', '2.1 percent', or '4.6 trillion "
-    "dollars'. No dollar signs and no percent signs. "
+    "appears in a tool result in this conversation. Never use memory or guess a number. "
+    "Write numbers in natural spoken form: say 'down 3.72 percent' instead of '-3.72 percent', "
+    "'up 2.1 percent' instead of '+2.1%', and '20 dollars and 31 cents' instead of '$20.31'. "
+    "Never output minus signs, plus signs, dollar signs, or percent symbols. "
     "DATA: say which ticker each number belongs to. If a tool result has demo true, say it "
     "is demo data and not real prices. If a tool result has an error, say you couldn't get "
     "that data. "
@@ -45,22 +47,52 @@ SYSTEM_PROMPT = (
     "and offer the facts instead. "
     "SCOPE: you can only check specific tickers or company names and the major indexes "
     "(S and P 500, Nasdaq, Dow, VIX). You cannot screen or rank the whole market. "
-    "You can explain general finance concepts in plain words without specific figures."
+    "You can explain general finance concepts in plain words without specific market prices."
 )
 
 # Extra instruction appended to the system prompt depending on how the router classified the message.
 INTENT_NOTES = {
     "chat": "This message is casual conversation. No finance data is needed. Reply briefly and naturally.",
-    "general": "This is a general finance concept question. Explain it simply, without specific numbers.",
-    "data": ("The tool results for this question are already in the conversation. Answer only "
-             "from them, using their exact numbers."),
+    "general": "This is a general finance concept question. Explain it clearly and concisely without quoting live market prices.",
+    "data": ("The tool results for this question are already in the conversation. Answer ONLY "
+             "using the tool results provided. Do not promise to look up anything else."),
 }
 
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
+_DEFERRED_LOOKUP = re.compile(
+    r"\b(?:now,?\s*)?(?:let me|i'll|i will)\s+(?:check|look up|pull up|fetch|see)\b",
+    re.IGNORECASE,
+)
+
+
+def _format_money(m):
+    dollars = m.group(1).replace(",", "")
+    cents = m.group(2)
+    d_word = "dollar" if dollars == "1" else "dollars"
+    if cents and int(cents) > 0:
+        c_val = int(cents)
+        c_word = "cent" if c_val == 1 else "cents"
+        return f"{dollars} {d_word} and {c_val} {c_word}"
+    return f"{dollars} {d_word}"
+
 
 def clean_for_speech(text):
-    return re.sub(r"[*_`#>]+", "", text).strip()
+    """Normalize symbols, negative signs, and currency so Piper TTS reads smoothly."""
+    s = re.sub(r"[*_`#>]+", "", text)
+    s = s.replace("&", " and ")
+    # $20.31 -> 20 dollars and 31 cents
+    s = re.sub(r"\$(\d[\d,]*)(?:\.(\d{2}))?\b", _format_money, s)
+    # -3.72% or -3.72 percent -> down 3.72 percent
+    s = re.sub(r"(?<!\w)-\s*(\d+(?:\.\d+)?)\s*(?:%|percent\b)", r"down \1 percent", s, flags=re.IGNORECASE)
+    # +3.72% or +3.72 percent -> up 3.72 percent
+    s = re.sub(r"(?<!\w)\+\s*(\d+(?:\.\d+)?)\s*(?:%|percent\b)", r"up \1 percent", s, flags=re.IGNORECASE)
+    # Standalone 3.72% -> 3.72 percent
+    s = re.sub(r"(\d+(?:\.\d+)?)\s*%", r"\1 percent", s)
+    # Leading minus sign on other numbers: -20.31 -> minus 20.31
+    s = re.sub(r"(?<!\w)-\s*(\d+(?:\.\d+)?)", r"minus \1", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip()
 
 
 # ---- number guard -------------------------------------------------------------
@@ -74,7 +106,7 @@ _BIG = ("hundred",) + tuple(_SCALES)
 
 # Things that look like numbers but are names or durations, not market figures.
 _MASK = re.compile(
-    r"s\s*&\s*p\s*500|nasdaq\s*-?\s*100|dow\s*30|russell\s*(?:1000|2000)|401\s*\(?k\)?|"
+    r"s\s*(?:&|and)\s*p\s*500|nasdaq\s*-?\s*100|dow\s*30|russell\s*(?:1000|2000)|401\s*\(?k\)?|"
     r"\b\d+(?:\.\d+)?\s*-?\s*(?:day|week|month|year|quarter|hour|minute)s?\b", re.IGNORECASE)
 
 _CLAIM = re.compile(
@@ -121,7 +153,6 @@ def _normalize_number_words(text):
     after_digits = lambda: bool(out) and re.fullmatch(r"\d[\d,]*(?:\.\d+)?", out[-1]) is not None
     out, i = [], 0
     while i < len(toks):
-        # A scale word right after digits ("4.6 trillion") is a unit, not a new spelled-out number.
         if not is_num(low[i]) or (low[i] in _BIG and after_digits()):
             out.append(toks[i])
             i += 1
@@ -132,7 +163,7 @@ def _normalize_number_words(text):
             if is_num(w):
                 run.append(w)
             elif w == "and" and run and run[-1] in _BIG and j + 1 < len(toks) and is_num(low[j + 1]):
-                pass  # "one hundred AND forty two"
+                pass
             elif w == "point" and run and j + 1 < len(toks) and low[j + 1] in _ONES:
                 run.append(w)
             else:
@@ -158,30 +189,42 @@ def _numbers_in(obj, out):
             _numbers_in(v, out)
 
 
-def _supported(value, dec, unit, money, allowed):
+def _numbers_in_text(text):
+    """Extract numeric values mentioned in the user's own prompt so they can be echoed safely."""
+    norm = _normalize_number_words(text)
+    vals = []
+    for m in _CLAIM.finditer(norm):
+        dec = m.group("dec") or ""
+        vals.append(float(m.group("int").replace(",", "") + ("." + dec if dec else "")))
+    return vals
+
+
+def _supported(value, dec, unit, money, allowed, allow_general_counts=False):
     unit = (unit or "").lower()
-    if unit.startswith("cent"):  # "forty three cents" must match the cents part of some tool number
+    if unit.startswith("cent"):
         return any(round((abs(a) % 1) * 100) == round(value) for a in allowed)
     scale = _SCALES.get(unit, 1)
     if not unit and not money and dec == 0 and (value <= 10 or 1900 <= value <= 2100):
-        return True  # "one of", "three sentences", "in 2008" are not market figures
+        return True
+    # In general finance explanations ("an index of 500 companies"), allow plain unitless integers.
+    if allow_general_counts and not unit and not money and dec == 0:
+        return True
     q = 10 ** dec
     for a in allowed:
         x = abs(a) / scale
-        # Same number rounded OR truncated to the precision the model used.
         if abs(round(x, dec) - value) < 1e-9 or abs(math.floor(x * q) / q - value) < 1e-9:
             return True
     return False
 
 
-def unsupported_numbers(text, allowed):
-    """Numbers in `text` that do not match any number in `allowed` (the tool results)."""
+def unsupported_numbers(text, allowed, allow_general_counts=False):
+    """Numbers in `text` that do not match any number in `allowed`."""
     norm = _MASK.sub(" ", _normalize_number_words(text))
     bad = []
     for m in _CLAIM.finditer(norm):
         dec = m.group("dec") or ""
         value = float(m.group("int").replace(",", "") + ("." + dec if dec else ""))
-        if not _supported(value, len(dec), m.group("unit"), bool(m.group("money")), allowed):
+        if not _supported(value, len(dec), m.group("unit"), bool(m.group("money")), allowed, allow_general_counts):
             bad.append(m.group(0).strip())
     return bad
 
@@ -209,20 +252,19 @@ def _stream(messages, tools):
                 yield json.loads(line)
 
 
-def _generate(messages, tools, allowed, speak, log):
-    """Stream one model reply. Each sentence is number-checked before it is printed or spoken.
-
-    speak(sentence) prints and speaks one approved sentence.
-    Returns (spoken_text, tool_calls, blocked). If blocked is True the model tried to say a
-    number no tool returned; generation was stopped and nothing unverified was spoken.
-    """
+def _generate(messages, tools, allowed, speak, log, allow_general_counts=False):
+    """Stream one model reply. Each sentence is number-checked before it is printed or spoken."""
     spoken, buf, tool_calls, blocked = [], "", [], False
 
     def emit(sentence):
         s = clean_for_speech(sentence)
         if not s:
             return True
-        bad = unsupported_numbers(s, allowed)
+        # Drop trailing filler like "Now, let me check Micron." so the assistant doesn't hang.
+        if _DEFERRED_LOOKUP.search(s):
+            log(f"[guard] stripped deferred-lookup sentence: {s!r}")
+            return True
+        bad = unsupported_numbers(s, allowed, allow_general_counts=allow_general_counts)
         if bad:
             log(f"[guard] blocked unverified number(s) {bad} in: {s!r}")
             return False
@@ -269,7 +311,7 @@ def _loads(raw):
 def _fallback_text(results, summarize, spoken_any):
     """What to say when the guard rejected the model's wording."""
     if results and summarize:
-        facts = " ".join(summarize(name, args, data) for name, args, data in results)
+        facts = " ".join(clean_for_speech(summarize(name, args, data)) for name, args, data in results)
         return ("Let me give you the verified numbers. " if spoken_any else "") + facts
     if spoken_any:
         return "Sorry, I can't verify the rest of that."
@@ -279,29 +321,23 @@ def _fallback_text(results, summarize, spoken_any):
 
 def ask(history, on_sentence, tools=None, run_tool=None, on_tool=None, system=SYSTEM_PROMPT,
         route=None, summarize=None, log=None):
-    """Answer the latest user message in `history` (a list of user/assistant text dicts).
-
-    on_sentence(text): called for each finished, number-checked sentence of spoken output.
-    on_tool(name, args): optional, for logging tool calls.
-    route(text, history) -> plan: optional router (finance_tools.route). Without it the
-        model decides about tool calls itself (the old behaviour), but the number guard still runs.
-    summarize(name, args, result) -> str: builds a spoken sentence from a tool result; used
-        if the guard blocks the model's wording (finance_tools.summarize_result).
-    Returns the text that was actually spoken. `history` is not modified.
-    """
+    """Answer the latest user message in `history` (a list of user/assistant text dicts)."""
     out_log = log or (lambda m: print(m, flush=True))
-    mid_line = [True]  # assistant.py has already printed "Assistant: " without a newline
+    mid_line = [True]
 
-    def log(msg):  # start log lines on a fresh terminal line, never in the middle of a sentence
+    def log(msg):
         if mid_line[0]:
             print()
             mid_line[0] = False
         out_log(msg)
 
     def speak(sentence):
-        print(sentence + " ", end="", flush=True)
+        cleaned = clean_for_speech(sentence)
+        if not cleaned:
+            return
+        print(cleaned + " ", end="", flush=True)
         mid_line[0] = True
-        on_sentence(sentence)
+        on_sentence(cleaned)
 
     def say(text):
         for s in SENTENCE_END.split(text):
@@ -312,19 +348,21 @@ def ask(history, on_sentence, tools=None, run_tool=None, on_tool=None, system=SY
     plan = route(user_text, list(history)[:-1]) if route else {"intent": "auto"}
     intent = plan.get("intent", "auto")
     if intent == "data" and run_tool is None:
-        intent = "auto"  # can't force tools without a way to run them
+        intent = "auto"
     planned = [n for n, _ in plan.get("calls", [])]
     log(f"[router] intent={intent}" + (f" tools={planned}" if planned else ""))
 
-    if "reply" in plan:  # screener / clarify: a fixed answer is better than asking the model
+    if "reply" in plan:
         say(plan["reply"])
         print()
-        return plan["reply"]
+        return clean_for_speech(plan["reply"])
 
     system_text = (system + " " + INTENT_NOTES.get(intent, "")).strip()
     messages = [{"role": "system", "content": system_text}] + list(history)
-    results, allowed = [], []
+    # Seed allowed numbers with any numbers the user themselves said in their prompt.
+    results, allowed = [], _numbers_in_text(user_text)
     use_tools = tools if intent == "auto" else None
+    allow_general_counts = (intent == "general")
 
     def run_one(name, args):
         if on_tool:
@@ -344,7 +382,9 @@ def ask(history, on_sentence, tools=None, run_tool=None, on_tool=None, system=SY
 
     spoken = []
     for _ in range(MAX_TOOL_ROUNDS + 1):
-        text, tool_calls, blocked = _generate(messages, use_tools, allowed, speak, log)
+        text, tool_calls, blocked = _generate(
+            messages, use_tools, allowed, speak, log, allow_general_counts=allow_general_counts
+        )
         if text:
             spoken.append(text)
         if blocked:
@@ -355,7 +395,6 @@ def ask(history, on_sentence, tools=None, run_tool=None, on_tool=None, system=SY
             break
         if not tool_calls or run_tool is None or use_tools is None:
             break
-        # Model-requested tools (only when no router is in use): run them and go around again.
         messages.append({"role": "assistant", "content": text, "tool_calls": tool_calls})
         for tc in tool_calls:
             fn = tc.get("function", {})
