@@ -5,7 +5,7 @@ I2S class-D amplifier,Analog Devices MAX98357AETE+T,1,4.08,4.08,https://www.digi
 Miniature speaker,"PUI Audio AS02804PR-N50-R (28mm, 4 ohm, 3W)",1,7.33,7.33,https://www.digikey.com/en/products/detail/pui-audio-inc/AS02804PR-N50-R/7622242,Compact 3W speaker.
 USB-C receptacle,GCT USB4105-GF-A,1,0.80,0.80,https://www.digikey.com/en/products/detail/gct/USB4105-GF-A/11198441,16-pin mid-mount; power + native USB.
 3.3V LDO regulator,"Torex XC6220B331MR-G (1A, SOT-25)",1,0.98,0.98,https://www.digikey.com/en/products/detail/torex-semiconductor-ltd/XC6220B331MR-G/2138177,1A output for Wi-Fi burst current headroom.
-Tactile switch,C&K PTS645SL50SMTR92 LFS,3,0.39,1.17,https://www.digikey.com/en/products/detail/c-k/PTS645SL50SMTR92-LFS/1279107,"EN, BOOT, and user button."
+Tactile switch,C&K PTS645SL50SMTR92 LFS,2,0.39,0.78,https://www.digikey.com/en/products/detail/c-k/PTS645SL50SMTR92-LFS/1279107,EN (reset) and BOOT.
 USB ESD protection,STMicroelectronics USBLC6-2SC6,1,0.54,0.54,https://www.digikey.com/en/products/detail/stmicroelectronics/USBLC6-2SC6/1040559,USB data line protection.
 Resistor 5.1k,Panasonic ERJ-3EKF5101V 0603 1%,2,0.10,0.20,https://www.digikey.com/en/products/detail/panasonic-electronic-components/ERJ-3EKF5101V/132977,USB-C CC pull-downs.
 Resistor 10k,Panasonic ERJ-3EKF1002V 0603 1%,1,0.10,0.10,https://www.digikey.com/en/products/detail/panasonic-electronic-components/ERJ-3EKF1002V/133096,EN pull-up.
