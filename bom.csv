@@ -1,0 +1,31 @@
+Item Name,Part Number / Specs,Quantity,Unit Price (USD),Total Price (USD),Purchase Link,Notes
+Wi-Fi/BLE MCU module,Espressif ESP32-S3-WROOM-1-N8R2,1,5.43,5.43,https://www.digikey.com/en/products/detail/espressif-systems/ESP32-S3-WROOM-1-N8R2/15200058,"8MB flash, 2MB PSRAM; avoids octal-PSRAM GPIO35-37 conflict."
+PDM digital microphone,Knowles/Syntiant SPH0655LM4H-1-8,1,1.69,1.69,https://www.digikey.com/en/products/detail/syntiant/SPH0655LM4H-1-8/11506911,PDM output. Needs ~1mm PCB acoustic hole.
+I2S class-D amplifier,Analog Devices MAX98357AETE+T,1,4.08,4.08,https://www.digikey.com/en/products/detail/analog-devices-inc-maxim-integrated/MAX98357AETE-T/4936122,"TQFN-16, runs from 5V rail."
+Miniature speaker,"PUI Audio AS02804PR-N50-R (28mm, 4 ohm, 3W)",1,7.33,7.33,https://www.digikey.com/en/products/detail/pui-audio-inc/AS02804PR-N50-R/7622242,Compact 3W speaker.
+USB-C receptacle,GCT USB4105-GF-A,1,0.80,0.80,https://www.digikey.com/en/products/detail/gct/USB4105-GF-A/11198441,16-pin mid-mount; power + native USB.
+3.3V LDO regulator,"Torex XC6220B331MR-G (1A, SOT-25)",1,0.98,0.98,https://www.digikey.com/en/products/detail/torex-semiconductor-ltd/XC6220B331MR-G/2138177,1A output for Wi-Fi burst current headroom.
+Tactile switch,C&K PTS645SL50SMTR92 LFS,3,0.39,1.17,https://www.digikey.com/en/products/detail/c-k/PTS645SL50SMTR92-LFS/1279107,"EN, BOOT, and user button."
+USB ESD protection,STMicroelectronics USBLC6-2SC6,1,0.54,0.54,https://www.digikey.com/en/products/detail/stmicroelectronics/USBLC6-2SC6/1040559,USB data line protection.
+Resistor 5.1k,Panasonic ERJ-3EKF5101V 0603 1%,2,0.10,0.20,https://www.digikey.com/en/products/detail/panasonic-electronic-components/ERJ-3EKF5101V/132977,USB-C CC pull-downs.
+Resistor 10k,Panasonic ERJ-3EKF1002V 0603 1%,1,0.10,0.10,https://www.digikey.com/en/products/detail/panasonic-electronic-components/ERJ-3EKF1002V/133096,EN pull-up.
+Resistor 100k,Panasonic ERJ-3EKF1003V 0603 1%,1,0.10,0.10,https://www.digikey.com/en/products/detail/panasonic-electronic-components/ERJ-3EKF1003V/133103,Amp SD_MODE reference.
+Capacitor 0.1uF,Samsung CL10B104KB8NNNC 0603 X7R 50V,4,0.10,0.40,https://www.digikey.com/en/products/detail/samsung-electro-mechanics/CL10B104KB8NNNC/3889158,Power rail decoupling.
+Capacitor 1uF,Samsung CL10A105KA8NNNC 0603 X5R 25V,3,0.10,0.30,https://www.digikey.com/en/products/detail/samsung-electro-mechanics/CL10A105KA8NNNC/3886760,LDO in/out and EN delay.
+Capacitor 10uF,Samsung CL10A106KO8NNNC 0603 X5R 16V,3,0.15,0.45,https://www.digikey.com/en/products/detail/samsung-electro-mechanics/CL10A106KO8NNNC/3887553,3.3V rail and amp VDD bulk.
+Capacitor 22uF,Yageo CC0805MKX5R7BB226 0805 X5R 16V,2,0.20,0.40,https://www.digikey.com/en/products/detail/yageo/CC0805MKX5R7BB226/5195308,5V rail bulk storage (0805 16V part).
+3D printing filament,"PETG spool, 1kg (minimum unit)",1,20.00,20.00,https://www.amazon.com/dp/B07PGY2ZV3,Enclosure material.
+Screws + heat-set inserts,M2 x 6mm screws and brass heat-set inserts,4,0.50,2.00,https://www.amazon.com/dp/B07Z3F3R8V,Case fasteners.
+Speaker adhesive,Black silicone adhesive tube,1,6.00,6.00,https://www.amazon.com/dp/B0002UEOYI,Seals speaker to internal baffle.
+Acoustic gasket tape,Closed-cell foam strip,1,4.00,4.00,https://www.amazon.com/dp/B0753XN25T,Prevents vibration leaks.
+Acoustic grille cloth,Speaker mesh fabric patch,1,3.00,3.00,https://www.amazon.com/dp/B0002KR1CY,Clean port cover.
+Enclosure feet,Adhesive rubber bumper pads,1,2.50,2.50,https://www.amazon.com/dp/B001W6Q4VI,Anti-vibration desk pads.
+USB-C cable,"USB-C to USB-C, 1m",1,5.00,5.00,https://www.amazon.com/dp/B086X7NS8H,Power and flashing cable.
+USB power adapter,5V 2A USB wall adapter,1,8.00,8.00,https://www.amazon.com/dp/B073WTRY3F,Stable power source.
+Soldering iron,Pine64 Pinecil V2,1,25.00,25.00,https://pine64.com/product/pinecil-smart-mini-portable-soldering-iron/,Assembly tool.
+Solder wire,0.6mm Sn63/Pb37 spool,1,10.00,10.00,https://www.amazon.com/dp/B00063XC3I,Fine-pitch solder.
+Flux pen,No-clean flux pen,1,7.00,7.00,https://www.amazon.com/dp/B015QIU43C,Wetting flux.
+Mini hot plate,PTC heating plate for reflow,1,16.00,16.00,https://www.amazon.com/dp/B0B58VRZXH,Reflow soldering tool.
+Isopropyl alcohol,"99% IPA, 16 oz",1,6.00,6.00,https://www.amazon.com/dp/B005JJTYXA,Cleanup solvent.
+Solder wick,Desoldering braid,1,3.50,3.50,https://www.amazon.com/dp/B002BD7HSW,Bridge removal.
+Precision tweezers,ESD-safe fine tip,1,4.00,4.00,https://www.amazon.com/dp/B0754DJW58,Component placement.
