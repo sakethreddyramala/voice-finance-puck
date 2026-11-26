@@ -222,3 +222,14 @@ clip.wav
 *.onnx
 *.onnx.json
 out.wav
+
+# KiCad backups and caches (keep .kicad_pro/.kicad_sch/.kicad_pcb/.kicad_prl and gerbers.zip)
+*-backups/
+_autosave-*
+*.kicad_pcb-bak
+*.kicad_sch-bak
+fp-info-cache
+*.bak
+
+# Fusion / CAD autosaves
+*.f3z.bak
